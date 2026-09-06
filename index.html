@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>케플러 제3법칙 탐구 활동 - 역학과 에너지</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & React DOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700&display=swap');
+        body {
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+        }
+        @media print {
+            .no-print { display: none !important; }
+            body { background-color: #ffffff !important; color: #000000 !important; }
+            .print-card { border: 1px solid #cbd5e1 !important; background: #ffffff !important; color: #000000 !important; box-shadow: none !important; }
+            input, textarea { border: 1px solid #94a3b8 !important; color: #000000 !important; background: #ffffff !important; }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col bg-slate-900 text-slate-100">
+    <div id="root" class="flex-grow flex flex-col"></div>
+
+    <script type="text/babel">
+        // Global unit identifier fallback to prevent ReferenceError
+        const AU = "AU";
+        window.AU = "AU";
+
+        // 태양계 8개 행성 표준 관측 데이터 (a: AU, T: Year)
+        const PLANET_DATA = [
+            { name: '수성', a: 0.387, T: 0.241, color: '#94a3b8' },
+            { name: '금성', a: 0.723, T: 0.615, color: '#fde047' },
+            { name: '지구', a: 1.000, T: 1.000, color: '#38bdf8' },
+            { name: '화성', a: 1.524, T: 1.881, color: '#f87171' },
+            { name: '목성', a: 5.204, T: 11.86, color: '#fb923c' },
+            { name: '토성', a: 9.582, T: 29.46, color: '#facc15' },
+            { name: '천왕성', a: 19.20, T: 84.01, color: '#2dd4bf' },
+            { name: '해왕성', a: 30.05, T: 164.8, color: '#818cf8' },
+        ];
+
+        const { useState, useEffect, useRef } = React;
+
+        function KeplerApp() {
+            const [activeTab, setActiveTab] = useState('data'); // 'data', 'graph', 'sim', 'conclusion'
+
+            // 학생 입력값 데이터 관리
+            const [inputs, setInputs] = useState(() => 
+                PLANET_DATA.map(() => ({
+                    a3: '',
+                    T2: '',
+                    ratio: ''
+                }))
+            );
+
+            // 서술형 결론 답변 State
+            const [conclusionText, setConclusionText] = useState('');
+
+            // 차트 인스턴스 참조
+            const chart1Ref = useRef(null);
+            const chart2Ref = useRef(null);
+            const chart3Ref = useRef(null);
+            const chart1Instance = useRef(null);
+            const chart2Instance = useRef(null);
+            const chart3Instance = useRef(null);
+
+            // 입력값 수정 처리
+            const handleInputChange = (index, field, value) => {
+                const newInputs = [...inputs];
+                newInputs[index][field] = value;
+                setInputs(newInputs);
+            };
+
+            // 자동 계산 채우기 기능
+            const autoCalculate = () => {
+                const newInputs = PLANET_DATA.map(p => {
+                    const a3 = Math.pow(p.a, 3);
+                    const T2 = Math.pow(p.T, 2);
+                    const ratio = T2 / a3;
+                    return {
+                        a3: a3.toFixed(3),
+                        T2: T2.toFixed(3),
+                        ratio: ratio.toFixed(3)
+                    };
+                });
+                setInputs(newInputs);
+            };
+
+            useEffect(() => {
+                if (activeTab === 'graph') {
+                    // Chart 1: a vs T
+                    if (chart1Ref.current) {
+                        if (chart1Instance.current) chart1Instance.current.destroy();
+                        const ctx1 = chart1Ref.current.getContext('2d');
+                        chart1Instance.current = new Chart(ctx1, {
+                            type: 'scatter',
+                            data: {
+                                datasets: [{
+                                    label: '행성 (a vs T)',
+                                    data: PLANET_DATA.map(p => ({ x: p.a, y: p.T })),
+                                    backgroundColor: PLANET_DATA.map(p => p.color),
+                                    borderColor: PLANET_DATA.map(p => p.color),
+                                    pointBackgroundColor: PLANET_DATA.map(p => p.color),
+                                    pointRadius: 7,
+                                    pointHoverRadius: 10
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    title: { display: true, text: '1. 긴반지름(a) vs 공전 주기(T)', color: '#f8fafc', font: { size: 15 } },
+                                    legend: { labels: { color: '#94a3b8' } },
+                                    tooltip: {
+                                        callbacks: {
+                                            label: (ctx) => `${PLANET_DATA[ctx.dataIndex].name}: a = ${ctx.raw.x} AU, T = ${ctx.raw.y} 년`
+                                        }
+                                    }
+                                },
+                                scales: {
+                                    x: { title: { display: true, text: '긴반지름 a (AU)', color: '#94a3b8' }, grid: { color: '#334155' }, ticks: { color: '#f8fafc' } },
+                                    y: { title: { display: true, text: '공전 주기 T (년)', color: '#94a3b8' }, grid: { color: '#334155' }, ticks: { color: '#f8fafc' } }
+                                }
+                            }
+                        });
+                    }
+
+                    // Chart 2: a³ vs T²
+                    if (chart2Ref.current) {
+                        if (chart2Instance.current) chart2Instance.current.destroy();
+                        const ctx2 = chart2Ref.current.getContext('2d');
+                        chart2Instance.current = new Chart(ctx2, {
+                            type: 'scatter',
+                            data: {
+                                datasets: [{
+                                    label: '행성 (a³ vs T²)',
+                                    data: PLANET_DATA.map(p => ({ x: Math.pow(p.a, 3), y: Math.pow(p.T, 2) })),
+                                    backgroundColor: PLANET_DATA.map(p => p.color),
+                                    borderColor: PLANET_DATA.map(p => p.color),
+                                    pointBackgroundColor: PLANET_DATA.map(p => p.color),
+                                    pointRadius: 7,
+                                    pointHoverRadius: 10
+                                }, {
+                                    label: '비례 추세선 (y = x)',
+                                    data: [{ x: 0, y: 0 }, { x: 28000, y: 28000 }],
+                                    type: 'line',
+                                    borderColor: '#ef4444',
+                                    borderDash: [5, 5],
+                                    fill: false,
+                                    pointRadius: 0
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    title: { display: true, text: '2. 긴반지름의 세제곱(a³) vs 공전 주기의 제곱(T²)', color: '#f8fafc', font: { size: 15 } },
+                                    legend: { labels: { color: '#94a3b8' } },
+                                    tooltip: {
+                                        callbacks: {
+                                            label: (ctx) => {
+                                                if (ctx.datasetIndex === 0) {
+                                                    return `${PLANET_DATA[ctx.dataIndex].name}: a³ = ${ctx.raw.x.toFixed(2)}, T² = ${ctx.raw.y.toFixed(2)}`;
+                                                }
+                                                return '';
+                                            }
+                                        }
+                                    }
+                                },
+                                scales: {
+                                    x: { title: { display: true, text: '긴반지름³ a³ (AU³)', color: '#94a3b8' }, grid: { color: '#334155' }, ticks: { color: '#f8fafc' } },
+                                    y: { title: { display: true, text: '공전 주기² T² (년²)', color: '#94a3b8' }, grid: { color: '#334155' }, ticks: { color: '#f8fafc' } }
+                                }
+                            }
+                        });
+                    }
+
+                    // Chart 3: Log Scale Axis
+                    if (chart3Ref.current) {
+                        if (chart3Instance.current) chart3Instance.current.destroy();
+                        const ctx3 = chart3Ref.current.getContext('2d');
+                        chart3Instance.current = new Chart(ctx3, {
+                            type: 'scatter',
+                            data: {
+                                datasets: [{
+                                    label: '로그 눈금 (a³ vs T²)',
+                                    data: PLANET_DATA.map(p => ({ x: Math.pow(p.a, 3), y: Math.pow(p.T, 2) })),
+                                    backgroundColor: PLANET_DATA.map(p => p.color),
+                                    borderColor: PLANET_DATA.map(p => p.color),
+                                    pointBackgroundColor: PLANET_DATA.map(p => p.color),
+                                    pointRadius: 7,
+                                    pointHoverRadius: 10
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    title: { display: true, text: '3. 로그 눈금 그래프 (Log Scale) & 직선성 확인', color: '#f8fafc', font: { size: 15 } },
+                                    legend: { labels: { color: '#94a3b8' } },
+                                    tooltip: {
+                                        callbacks: {
+                                            label: (ctx) => `${PLANET_DATA[ctx.dataIndex].name}: a³ = ${ctx.raw.x.toFixed(3)}, T² = ${ctx.raw.y.toFixed(3)}`
+                                        }
+                                    }
+                                },
+                                scales: {
+                                    x: {
+                                        type: 'logarithmic',
+                                        title: { display: true, text: '긴반지름³ a³ (AU³) [로그 스케일]', color: '#94a3b8' },
+                                        grid: { color: '#334155' },
+                                        ticks: { color: '#f8fafc' }
+                                    },
+                                    y: {
+                                        type: 'logarithmic',
+                                        title: { display: true, text: '공전 주기² T² (년²) [로그 스케일]', color: '#94a3b8' },
+                                        grid: { color: '#334155' },
+                                        ticks: { color: '#f8fafc' }
+                                    }
+                                }
+                            }
+                        });
+                    }
+                }
+            }, [activeTab]);
+
+            return (
+                <div className="max-w-6xl mx-auto w-full p-4 md:p-6 space-y-6">
+                    {/* Header Section */}
+                    <header className="bg-slate-800/90 backdrop-blur border border-slate-700 rounded-2xl p-6 shadow-xl">
+                        <div>
+                            <span className="inline-block px-3 py-1 bg-indigo-500/20 text-indigo-400 rounded-full text-xs font-semibold mb-2 border border-indigo-500/30">
+                                고등학교 2학년 역학과 에너지 탐구 활동
+                            </span>
+                            <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight">
+                                🌌 행성 관측 데이터를 이용한 케플러 법칙 확인하기
+                            </h1>
+                            <p className="text-slate-400 text-sm mt-1">
+                                목표: 태양계 행성의 관측 데이터를 계산 및 시각화하여 케플러 제3법칙(조화의 법칙)을 도출한다.
+                            </p>
+                        </div>
+                    </header>
+
+                    {/* 탐구 문제 인식 박스 */}
+                    <div className="bg-gradient-to-r from-indigo-950/60 to-purple-950/60 border border-indigo-500/30 rounded-xl p-4 text-indigo-200 text-sm flex items-start gap-3">
+                        <span className="text-xl">💡</span>
+                        <div>
+                            <strong className="font-semibold text-white">문제 인식:</strong> 케플러는 천체 관측 자료로 행성의 거리와 주기의 관계를 어떻게 찾아냈을까?
+                        </div>
+                    </div>
+
+                    {/* 네비게이션 탭 */}
+                    <div className="flex border-b border-slate-700 gap-2 overflow-x-auto">
+                        <button
+                            onClick={() => setActiveTab('data')}
+                            className={`px-5 py-3 font-semibold text-sm rounded-t-xl transition-all flex items-center gap-2 ${
+                                activeTab === 'data'
+                                    ? 'bg-slate-800 text-indigo-400 border-t-2 border-indigo-500'
+                                    : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                            }`}
+                        >
+                            📊 Step 1. 데이터 정리 & 계산
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('graph')}
+                            className={`px-5 py-3 font-semibold text-sm rounded-t-xl transition-all flex items-center gap-2 ${
+                                activeTab === 'graph'
+                                    ? 'bg-slate-800 text-indigo-400 border-t-2 border-indigo-500'
+                                    : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                            }`}
+                        >
+                            📈 Step 2. 관계 그래프 분석
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('sim')}
+                            className={`px-5 py-3 font-semibold text-sm rounded-t-xl transition-all flex items-center gap-2 ${
+                                activeTab === 'sim'
+                                    ? 'bg-slate-800 text-indigo-400 border-t-2 border-indigo-500'
+                                    : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                            }`}
+                        >
+                            🪐 Step 3. 궤도 시뮬레이션
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('conclusion')}
+                            className={`px-5 py-3 font-semibold text-sm rounded-t-xl transition-all flex items-center gap-2 ${
+                                activeTab === 'conclusion'
+                                    ? 'bg-slate-800 text-indigo-400 border-t-2 border-indigo-500'
+                                    : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                            }`}
+                        >
+                            📝 Step 4. 결론 도출
+                        </button>
+                    </div>
+
+                    {/* Tab 1 content */}
+                    {activeTab === 'data' && (
+                        <div className="bg-slate-800/90 backdrop-blur border border-slate-700 rounded-2xl p-6 shadow-xl space-y-4">
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                                <div>
+                                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                                        <span>1.</span> 태양계 행성 관측 데이터 및 물리량 계산
+                                    </h2>
+                                    <p className="text-xs text-slate-400 mt-1">
+                                        공전 궤도 긴반지름 a(AU)와 공전 주기 T(년) 데이터를 이용하여 a³, T², 그리고 T² / a³ 값을 계산해보세요.
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={autoCalculate}
+                                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-3 py-2 rounded-lg font-medium transition-all shadow"
+                                >
+                                    ⚡ 자동 계산 채우기
+                                </button>
+                            </div>
+
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm text-left border-collapse">
+                                    <thead>
+                                        <tr className="bg-slate-900/80 text-slate-300 border-b border-slate-700">
+                                            <th className="p-3 border-r border-slate-700 text-center">구분</th>
+                                            <th className="p-3 border-r border-slate-700 text-center">공전 궤도 긴반지름<br/><span className="text-indigo-400 font-mono">a (AU)</span></th>
+                                            <th className="p-3 border-r border-slate-700 text-center">긴반지름의 세제곱<br/><span className="text-indigo-400 font-mono">a³ (AU³)</span></th>
+                                            <th className="p-3 border-r border-slate-700 text-center">공전 주기<br/><span className="text-indigo-400 font-mono">T (년)</span></th>
+                                            <th className="p-3 border-r border-slate-700 text-center">공전 주기의 제곱<br/><span className="text-indigo-400 font-mono">T² (년²)</span></th>
+                                            <th className="p-3 text-center bg-indigo-950/40">
+                                                비율<br/><span className="text-emerald-400 font-mono font-bold">T² / a³</span>
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-700/60">
+                                        {PLANET_DATA.map((planet, idx) => (
+                                            <tr key={planet.name} className="hover:bg-slate-700/30 transition-colors">
+                                                <td className="p-3 font-semibold text-white text-center border-r border-slate-700 flex items-center justify-center gap-2">
+                                                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: planet.color }}></span>
+                                                    {planet.name}
+                                                </td>
+                                                <td className="p-3 text-center border-r border-slate-700 font-mono text-slate-300">
+                                                    {planet.a}
+                                                </td>
+                                                <td className="p-3 border-r border-slate-700">
+                                                    <input
+                                                        type="number"
+                                                        step="any"
+                                                        placeholder="a³"
+                                                        value={inputs[idx].a3}
+                                                        onChange={(e) => handleInputChange(idx, 'a3', e.target.value)}
+                                                        className="w-full bg-slate-900/80 border border-slate-700 rounded px-2 py-1 text-center font-mono text-emerald-300 focus:outline-none focus:border-indigo-500"
+                                                    />
+                                                </td>
+                                                <td className="p-3 text-center border-r border-slate-700 font-mono text-slate-300">
+                                                    {planet.T}
+                                                </td>
+                                                <td className="p-3 border-r border-slate-700">
+                                                    <input
+                                                        type="number"
+                                                        step="any"
+                                                        placeholder="T²"
+                                                        value={inputs[idx].T2}
+                                                        onChange={(e) => handleInputChange(idx, 'T2', e.target.value)}
+                                                        className="w-full bg-slate-900/80 border border-slate-700 rounded px-2 py-1 text-center font-mono text-emerald-300 focus:outline-none focus:border-indigo-500"
+                                                    />
+                                                </td>
+                                                <td className="p-3 bg-indigo-950/20">
+                                                    <input
+                                                        type="number"
+                                                        step="any"
+                                                        placeholder="T²/a³"
+                                                        value={inputs[idx].ratio}
+                                                        onChange={(e) => handleInputChange(idx, 'ratio', e.target.value)}
+                                                        className="w-full bg-indigo-900/40 border border-indigo-700/60 rounded px-2 py-1 text-center font-mono text-amber-300 font-semibold focus:outline-none focus:border-amber-400"
+                                                    />
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div className="p-4 bg-slate-900/60 rounded-xl border border-slate-700/80 text-xs text-slate-300 space-y-1">
+                                <p className="font-semibold text-indigo-400">💡 관찰 포인트:</p>
+                                <p>• 모든 행성에서 <span className="text-amber-300 font-mono font-bold">T² / a³</span> 값을 계산해보면 거의 <strong>1.00</strong>에 가까운 일정한 상수(Constant) 값을 가짐을 관측할 수 있습니다.</p>
+                                <p>• 즉, 공전 주기의 제곱은 궤도 긴반지름의 세제곱에 비례함(T² ∝ a³)을 수치적으로 나타냅니다.</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Tab 2 content */}
+                    {activeTab === 'graph' && (
+                        <div className="space-y-6">
+                            <div className="bg-slate-800/90 backdrop-blur border border-slate-700 rounded-2xl p-6 shadow-xl space-y-6">
+                                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                                    <span>2.</span> 데이터 그래프 분석 (케플러 제3법칙 시각화)
+                                </h2>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    {/* Chart 1 */}
+                                    <div className="bg-slate-900/70 p-4 rounded-xl border border-slate-700 h-80 flex flex-col">
+                                        <div className="flex-grow relative">
+                                            <canvas ref={chart1Ref}></canvas>
+                                        </div>
+                                        <p className="text-xs text-center text-slate-400 mt-2">
+                                            a 와 T 의 관계: 거리가 멀어질수록 주기가 비선형적으로 가파르게 증가함
+                                        </p>
+                                    </div>
+
+                                    {/* Chart 2 */}
+                                    <div className="bg-slate-900/70 p-4 rounded-xl border border-slate-700 h-80 flex flex-col">
+                                        <div className="flex-grow relative">
+                                            <canvas ref={chart2Ref}></canvas>
+                                        </div>
+                                        <p className="text-xs text-center text-emerald-400 font-medium mt-2">
+                                            a³ 와 T² 의 관계: 기울기가 1인 원점을 지나치는 완전한 정비례 직선 관계!
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Chart 3 - Log Scale Graph */}
+                                <div className="bg-slate-900/70 p-4 rounded-xl border border-slate-700 h-96 flex flex-col">
+                                    <div className="flex-grow relative">
+                                        <canvas ref={chart3Ref}></canvas>
+                                    </div>
+                                    <div className="text-xs text-slate-300 mt-3 p-3 bg-slate-800/80 rounded-lg border border-slate-700">
+                                        <span className="font-semibold text-purple-400">📌 활동지 로그 눈금(Log Scale) 분석:</span><br/>
+                                        축 값을 로그 눈금으로 변경하면 내행성(수성, 금성, 지구)부터 외행성(목성, 토성, 해왕성)까지 수백~수만 배 차이나는 넓은 데이터 범위를 한눈에 비교할 수 있으며, 선형 추세선 상에 일렬로 배치됨을 확연히 볼 수 있습니다.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Orbit Simulation */}
+                    {activeTab === 'sim' && (
+                        <OrbitSimulator />
+                    )}
+
+                    {/* Tab 4 content */}
+                    {activeTab === 'conclusion' && (
+                        <div className="bg-slate-800/90 backdrop-blur border border-slate-700 rounded-2xl p-6 shadow-xl space-y-6">
+                            <h2 className="text-xl font-bold text-white flex items-center gap-2 border-b border-slate-700 pb-3">
+                                📝 [결론 도출] 및 탐구 정리
+                            </h2>
+
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-semibold text-indigo-300 mb-2">
+                                        Q. 결과 그래프에서 행성 공전 궤도의 긴반지름(a)과 공전 주기(T) 사이에는 어떤 관계가 있는지 설명해 보자.
+                                    </label>
+                                    <textarea
+                                        rows="4"
+                                        placeholder="예: 긴반지름과 공전 주기를 직접 비교했을 때는 곡선으로 증가하지만, 긴반지름의 세제곱(a³)과 공전 주기의 제곱(T²)을 비교하면 정비례하는 직선 관계가 성립한다. 즉, T² / a³ = k (일정)가 성립한다..."
+                                        value={conclusionText}
+                                        onChange={(e) => setConclusionText(e.target.value)}
+                                        className="w-full bg-slate-900/80 border border-slate-700 rounded-xl p-4 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 text-sm leading-relaxed"
+                                    ></textarea>
+                                </div>
+
+                                <div className="p-5 bg-indigo-950/40 border border-indigo-500/30 rounded-xl space-y-3 text-sm">
+                                    <h3 className="text-base font-bold text-indigo-300 flex items-center gap-2">
+                                        💡 케플러 제3법칙 (조화의 법칙, Law of Harmonies) 핵심 정리
+                                    </h3>
+                                    <ul className="list-disc list-inside space-y-2 text-slate-300 leading-relaxed">
+                                        <li>
+                                            <strong>관계식:</strong> 행성의 공전 주기의 제곱(T²)은 궤도의 긴반지름의 세제곱(a³)에 비례한다.
+                                            <span className="block font-mono text-amber-300 text-center my-2 text-base bg-slate-900/80 py-2 rounded-lg border border-slate-800">
+                                                T² ∝ a³ &nbsp;&nbsp;또는&nbsp;&nbsp; T² / a³ = k (상수)
+                                            </span>
+                                        </li>
+                                        <li>
+                                            <strong>단위계의 이점:</strong> 공전 주기를 년(Year), 긴반지름을 천문단위({AU})로 나타내면 태양계 행성의 경우 비례 상수 k ≈ 1이 되어 <span className="text-emerald-400 font-semibold font-mono">T² = a³</span> 로 더욱 간결하게 표현됩니다.
+                                        </li>
+                                        <li>
+                                            <strong>물리적 의미:</strong> 태양에서 멀리 떨어진 행성일수록 궤도 둘레가 길어질 뿐만 아니라, 태양의 중력이 약해져 공전 속도 자체도 느려지므로 공전 주기가 급격하게 길어집니다.
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function OrbitSimulator() {
+            const canvasRef = useRef(null);
+            const [speed, setSpeed] = useState(1);
+            const [selectedPlanet, setSelectedPlanet] = useState('지구');
+
+            useEffect(() => {
+                const canvas = canvasRef.current;
+                if (!canvas) return;
+                const ctx = canvas.getContext('2d');
+                let animationFrameId;
+
+                let angles = PLANET_DATA.map(() => Math.random() * Math.PI * 2);
+
+                const render = () => {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                    const centerX = canvas.width / 2;
+                    const centerY = canvas.height / 2;
+
+                    // 태양 그리기
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, 14, 0, Math.PI * 2);
+                    ctx.fillStyle = '#f97316';
+                    ctx.shadowColor = '#f97316';
+                    ctx.shadowBlur = 18;
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+
+                    // 행성 궤도 및 회전
+                    PLANET_DATA.forEach((planet, idx) => {
+                        const r = Math.pow(planet.a, 0.5) * 35 + 25;
+
+                        // 궤도선
+                        ctx.beginPath();
+                        ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
+                        ctx.strokeStyle = selectedPlanet === planet.name ? '#38bdf8' : '#334155';
+                        ctx.lineWidth = selectedPlanet === planet.name ? 2 : 1;
+                        ctx.setLineDash(selectedPlanet === planet.name ? [] : [2, 4]);
+                        ctx.stroke();
+                        ctx.setLineDash([]);
+
+                        // 케플러 제3법칙에 의한 각속도: w = 2*PI / T
+                        const angularVelocity = (0.02 / planet.T) * speed;
+                        angles[idx] += angularVelocity;
+
+                        const px = centerX + r * Math.cos(angles[idx]);
+                        const py = centerY + r * Math.sin(angles[idx]);
+
+                        // 행성 그려주기
+                        ctx.beginPath();
+                        ctx.arc(px, py, selectedPlanet === planet.name ? 8 : 5, 0, Math.PI * 2);
+                        ctx.fillStyle = planet.color;
+                        ctx.fill();
+
+                        // 행성 이름 표기
+                        if (r > 40) {
+                            ctx.fillStyle = '#94a3b8';
+                            ctx.font = '10px Pretendard';
+                            ctx.fillText(planet.name, px + 8, py + 3);
+                        }
+                    });
+
+                    animationFrameId = requestAnimationFrame(render);
+                };
+
+                render();
+
+                return () => cancelAnimationFrame(animationFrameId);
+            }, [speed, selectedPlanet]);
+
+            const currentPlanetInfo = PLANET_DATA.find(p => p.name === selectedPlanet);
+
+            return (
+                <div className="bg-slate-800/90 backdrop-blur border border-slate-700 rounded-2xl p-6 shadow-xl space-y-4">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div>
+                            <h2 className="text-xl font-bold text-white">🪐 태양계 행성 공전 궤도 시뮬레이션</h2>
+                            <p className="text-xs text-slate-400 mt-1">
+                                태양에서 멀수록 공전 주기가 길어지는 이유를 시각적으로 직접 확인해 보세요.
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-4 text-xs">
+                            <label className="text-slate-300">시뮬레이션 속도:</label>
+                            <input
+                                type="range"
+                                min="0.2"
+                                max="3"
+                                step="0.1"
+                                value={speed}
+                                onChange={(e) => setSpeed(parseFloat(e.target.value))}
+                                className="accent-indigo-500 cursor-pointer"
+                            />
+                            <span className="font-mono text-indigo-400">{speed}x</span>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="md:col-span-2 bg-slate-900 rounded-xl overflow-hidden border border-slate-700 relative flex items-center justify-center min-h-[380px]">
+                            <canvas ref={canvasRef} width={600} height={400} className="w-full h-auto max-w-full" />
+                        </div>
+
+                        {/* 행성 선택 및 정보 카드 */}
+                        <div className="space-y-4 flex flex-col justify-between">
+                            <div className="space-y-2">
+                                <label className="block text-xs font-semibold text-slate-400">행성 선택</label>
+                                <div className="grid grid-cols-4 gap-2">
+                                    {PLANET_DATA.map(p => (
+                                        <button
+                                            key={p.name}
+                                            onClick={() => setSelectedPlanet(p.name)}
+                                            className={`p-2 rounded-lg text-xs font-medium transition-all ${
+                                                selectedPlanet === p.name
+                                                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30 font-bold'
+                                                    : 'bg-slate-900 text-slate-400 hover:bg-slate-700 hover:text-white'
+                                            }`}
+                                        >
+                                            {p.name}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {currentPlanetInfo && (
+                                <div className="bg-slate-900/90 border border-slate-700 rounded-xl p-4 space-y-3">
+                                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                                        <span className="font-bold text-white text-base flex items-center gap-2">
+                                            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: currentPlanetInfo.color }}></span>
+                                            {currentPlanetInfo.name}
+                                        </span>
+                                        <span className="text-xs text-indigo-400 font-mono">Planet Info</span>
+                                    </div>
+
+                                    <div className="space-y-2 text-xs font-mono">
+                                        <div className="flex justify-between">
+                                            <span className="text-slate-400">궤도 긴반지름 (a):</span>
+                                            <span className="text-amber-300">{currentPlanetInfo.a} {AU}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-slate-400">공전 주기 (T):</span>
+                                            <span className="text-sky-300">{currentPlanetInfo.T} 년</span>
+                                        </div>
+                                        <div className="flex justify-between border-t border-slate-800 pt-2">
+                                            <span className="text-slate-400">a³ (AU³):</span>
+                                            <span className="text-emerald-400">{Math.pow(currentPlanetInfo.a, 3).toFixed(2)}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-slate-400">T² (년²):</span>
+                                            <span className="text-emerald-400">{Math.pow(currentPlanetInfo.T, 2).toFixed(2)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="p-3 bg-slate-900/50 rounded-lg text-xs text-slate-400 leading-relaxed border border-slate-800">
+                                💡 수성은 공전 주기가 0.24년(약 88일)으로 매우 빠른 반면, 해왕성은 164.8년이나 걸립니다!
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<KeplerApp />);
+    </script>
+</body>
+</html>
